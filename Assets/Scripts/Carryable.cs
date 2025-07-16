@@ -5,11 +5,38 @@ using UnityEngine;
 public class Carryable : NetworkBehaviour
 {
     // ===== 現在の運搬者 =====
-    [Networked]
-    public NetworkObject Carrier { get; set; }   // NetworkObject に変更
+    // ▼ Fusion2 ではカンマ区切りで追加属性を書く
+    [Networked, OnChangedRender(nameof(OnCarrierChanged))]
+    public NetworkObject Carrier { get; set; }
 
     Rigidbody _rb;
     void Awake() => _rb = GetComponent<Rigidbody>();
+
+    // 変更検知コールバック（引数なし）
+    void OnCarrierChanged() => SyncState();
+
+    void SyncState()
+    {
+        bool carried = Carrier != null;
+
+        // 親子付け
+        if (carried)
+        {
+            var anchor = Carrier.GetComponent<Player>().CarryAnchor;
+            transform.SetParent(anchor, false);
+        }
+        else
+        {
+            transform.SetParent(null, true);
+        }
+
+        // 物理切替
+        if (_rb)
+        {
+            _rb.isKinematic = carried;
+            if (!carried) _rb.WakeUp();
+        }
+    }
 
     public override void FixedUpdateNetwork()
     {
@@ -22,30 +49,34 @@ public class Carryable : NetworkBehaviour
         }
     }
 
-    // ピックアップメソッド
-    public void PickedUpBy(Player p)
-    {
-        if (_rb) _rb.isKinematic = true;
+    // ── API ─────────────────────
+    public void PickedUpBy(Player p) => Carrier = p.Object;   // これだけで全員に同期
+    public void Dropped() => Carrier = null;
 
-        transform.SetParent(p.CarryAnchor, worldPositionStays: false);
 
-        Carrier = p.Object;      // Player の NetworkObject を直接代入
-    }
+    //// ピックアップメソッド
+    //public void PickedUpBy(Player p)
+    //{
+    //    if (_rb) _rb.isKinematic = true;
 
-    //ドロップメソッド
-    public void Dropped()
-    {
-        transform.SetParent(null, true);
+    //    transform.SetParent(p.CarryAnchor, worldPositionStays: false);
 
-        // プレイヤーの前方 0.3 m & 少し下げる 0.1 m
-        transform.position += transform.forward * 0.3f - Vector3.up * 0.1f;
+    //    Carrier = p.Object;      // Player の NetworkObject を直接代入
+    //}
 
-        if (_rb)
-        {
-            _rb.isKinematic = false;
-            _rb.WakeUp();              // 物理エンジンを確実に再開
-        }
-        Carrier = null;
+    ////ドロップメソッド
+    //public void Dropped()
+    //{
+    //    transform.SetParent(null, true);
 
-    }
+    //    // プレイヤーの前方 0.3 m & 少し下げる 0.1 m
+    //    transform.position += transform.forward * 0.3f - Vector3.up * 0.1f;
+
+    //    if (_rb)
+    //    {
+    //        _rb.isKinematic = false;
+    //        _rb.WakeUp();              // 物理エンジンを確実に再開
+    //    }
+    //    Carrier = null;
+    //}
 }
